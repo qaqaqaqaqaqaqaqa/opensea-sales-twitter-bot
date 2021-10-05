@@ -8,68 +8,51 @@ const cache = require('./cache');
 // Format tweet text
 function formatAndSendTweet(event) {
     // Handle both individual items + bundle sales
-    const assetName = _.get(event, ['asset', 'name'], _.get(event, ['asset_bundle', 'name']));
-    const openseaLink = _.get(event, ['asset', 'permalink'], _.get(event, ['asset_bundle', 'permalink']));
+    const tokenName = _.get(event, ['asset', 'name']);
+  const image = _.get(event, ['asset', 'image_url']);
+  const openseaLink = _.get(event, ['asset', 'permalink']);
+  const totalPrice = _.get(event, 'total_price');
+  const usdValue = _.get(event, ['payment_token', 'usd_price']);
+  const tokenSymbol = _.get(event, ['payment_token', 'symbol']);
 
-    const totalPrice = _.get(event, 'total_price');
+  const formattedTokenPrice = ethers.utils.formatEther(totalPrice.toString());
+  const formattedUsdPrice = (formattedTokenPrice * usdValue).toFixed(2);
+  const formattedPriceSymbol = tokenSymbol === 'WETH' || tokenSymbol === 'ETH' ? 'Ξ' : ` ${tokenSymbol}`;
 
-    const tokenDecimals = _.get(event, ['payment_token', 'decimals']);
-    const tokenUsdPrice = _.get(event, ['payment_token', 'usd_price']);
-    const tokenEthPrice = _.get(event, ['payment_token', 'eth_price']);
+  const tweetText = `🐨 ${tokenName} just sold for ${formattedTokenPrice}${formattedPriceSymbol} ($${formattedUsdPrice}) #krazykoalanft ${openseaLink}`;
 
-    const formattedUnits = ethers.utils.formatUnits(totalPrice, tokenDecimals);
-    const formattedEthPrice = formattedUnits * tokenEthPrice;
-    const formattedUsdPrice = formattedUnits * tokenUsdPrice;
+// 🐨 Krazy Koala #5066 just sold for Ξ0.035 ($118.88)
+// https://etherscan.io/tx/0xf03308b470ced59ec745812b2f8194369d609a8c3d79cb6fb445506fdff1885f
+// #krazykoalanft
 
-    const tweetText = `${assetName} bought for ${formattedEthPrice}${ethers.constants.EtherSymbol} ($${Number(formattedUsdPrice).toFixed(2)}) #NFT ${openseaLink}`;
+  console.log(tweetText);
 
-    console.log(tweetText);
-
-    // OPTIONAL PREFERENCE - don't tweet out sales below X ETH (default is 1 ETH - change to what you prefer)
-    // if (Number(formattedEthPrice) < 1) {
-    //     console.log(`${assetName} sold below tweet price (${formattedEthPrice} ETH).`);
-    //     return;
-    // }
-
-    // OPTIONAL PREFERENCE - if you want the tweet to include an attached image instead of just text
-    // const imageUrl = _.get(event, ['asset', 'image_url']);
-    // return tweet.tweetWithImage(tweetText, imageUrl);
-
-    return tweet.tweet(tweetText);
+  return tweet.handleDupesAndTweet(tokenName, tweetText, image);
 }
 
 // Poll OpenSea every 60 seconds & retrieve all sales for a given collection in either the time since the last sale OR in the last minute
 setInterval(() => {
-    const lastSaleTime = cache.get('lastSaleTime', null) || moment().startOf('minute').subtract(59, "seconds").unix();
+    const lastMinute = moment().startOf('minute').subtract(59, 'seconds').unix();
 
-    console.log(`Last sale (in seconds since Unix epoch): ${cache.get('lastSaleTime', null)}`);
+  axios
+    .get('https://api.opensea.io/api/v1/events', {
+      params: {
+        collection_slug: process.env.OPENSEA_COLLECTION_SLUG,
+        event_type: 'successful',
+        occurred_after: lastMinute,
+        only_opensea: 'false',
+      },
+    })
+    .then((response) => {
+      const events = _.get(response, ['data', 'asset_events']);
 
-    axios.get('https://api.opensea.io/api/v1/events', {
-        params: {
-            collection_slug: process.env.OPENSEA_COLLECTION_SLUG,
-            event_type: 'successful',
-            occurred_after: lastSaleTime,
-            only_opensea: 'false'
-        }
-    }).then((response) => {
-        const events = _.get(response, ['data', 'asset_events']);
+      console.log(`${events.length} sales in the last minute...`);
 
-        const sortedEvents = _.sortBy(events, function(event) {
-            const created = _.get(event, 'created_date');
-
-            return new Date(created);
-        })
-
-        console.log(`${events.length} sales since the last one...`);
-
-        _.each(sortedEvents, (event) => {
-            const created = _.get(event, 'created_date');
-
-            cache.set('lastSaleTime', moment(created).unix());
-
-            return formatAndSendTweet(event);
-        });
-    }).catch((error) => {
-        console.error(error);
+      _.each(events, (event) => {
+        return formatAndSendTweet(event);
+      });
+    })
+    .catch((error) => {
+      console.error(error);
     });
 }, 60000);
