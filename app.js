@@ -8,7 +8,7 @@ const cache = require('./cache');
 // Format tweet text
 function formatAndSendTweet(event) {
     // Handle both individual items + bundle sales
-    const tokenName = _.get(event, ['asset', 'name']);
+  const tokenName = _.get(event, ['asset', 'name']);
   const image = _.get(event, ['asset', 'image_url']);
   const openseaLink = _.get(event, ['asset', 'permalink']);
   const totalPrice = _.get(event, 'total_price');
