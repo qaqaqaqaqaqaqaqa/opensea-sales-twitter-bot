@@ -4,7 +4,7 @@
     "description": "Twitter bot tweeting Opensea sales for a given collection",
     "main": "app.js",
     "scripts": {
-        "start": "node your-script.js"
+        "start": "node app.js"
     },
     "author": "Daniel Griffin (http://github.com/dsgriffin)",
     "license": "ISC",
